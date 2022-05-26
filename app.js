@@ -18,64 +18,112 @@ app.use(express.json());
 
 const corsOptions = {
   origin: "https://cdpn.io",
-  optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+  optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
 
 const port = 3000;
 
-/*app.get("/proverbs/:id", async (req, res) => {
-  const { id } = req.params;
-  const [rows] = await pool.query("SELECT * FROM proverbs WHERE id = ?", [id]);
-
-  if (rows.length == 0) {
-    res.status(404).json({
-      msg: "not found",
-    });
-    return;
-  }
-
-  res.json(rows[0]);
-});*/
-
-app.get("/proverbs/rand", async (req, res) => {
-  const [[row]] = await pool.query(
-    "SELECT * FROM proverbs ORDER BY RAND() LIMIT 1"
+app.get("/proverbs", async (req, res) => {
+  const [row] = await pool.query(
+    `
+  SELECT * 
+  FROM proverbs
+  `
   );
-
-  await pool.query("UPDATE proverbs SET hit = hit + 1 WHERE id = ?", [row.id]);
-
-  row.hit++;
 
   res.json(row);
 });
 
-app.patch("/proverbs/rand", async (req, res) => {
-  const [[like_row]] = await pool.query(
-    "UPDATE proverbs SET likeIt = likeIt + 1 WHERE id = ?",
-    [like_row.id]
+app.get("/proverbs/rand", async (req, res) => {
+  const [[proverbsRow]] = await pool.query(
+    `
+    SELECT * 
+    FROM 
+    proverbs 
+    ORDER BY RAND() 
+    LIMIT 1
+    `
   );
 
-  like_row.likeIt++;
+  if (proverbsRow === undefined) {
+    res.status(404).json({
+      resultCode: "F-1",
+      msg: "404 not found",
+    });
+    return;
+  }
 
-  res.json(like_row);
-});
-
-app.patch("/proverbs/rand", async (req, res) => {
-  const [[hate_row]] = await pool.query(
-    "UPDATE proverbs SET hateIt = hateIt + 1 WHERE id = ?",
-    [hate_row.id]
+  await pool.query(
+    `
+    UPDATE proverbs
+    SET hit = hit + 1
+    WHERE id = ?
+    `,
+    [proverbsRow.id]
   );
 
-  hate_row.hateIt++;
+  proverbsRow.hit++;
 
-  res.json(hate_row);
+  res.json({
+    resultCode: "S-1",
+    msg: "성공",
+    data: proverbsRow,
+  });
 });
 
-app.get("/proverbs", async (req, res) => {
-  const [rows] = await pool.query("SELECT * FROM proverbs ORDER BY id DESC");
+app.patch("/proverbs/:id", async (req, res) => {
+  const { id } = req.params;
+  const [[proverbsRow]] = await pool.query(
+    `
+    SELECT *
+    FROM proverbs
+    WHERE id = ?
+    `,
+    [id]
+  );
 
-  res.json(rows);
+  if (proverbsRow === undefined) {
+    res.status(404).json({
+      resultCode: "F-1",
+      msg: "404 not found",
+    });
+    return;
+  }
+
+  const {
+    body = proverbsRow.body,
+    author = proverbsRow.author,
+    likeIt = proverbsRow.likeIt,
+    hateIt = proverbsRow.hateIt,
+  } = req.body;
+
+  await pool.query(
+    `UPDATE proverbs
+     SET body = ?,
+     author = ?,
+     likeIt = ?,
+     hateIt = ?
+     WHERE id = ?`,
+    [body, author, likeIt, hateIt, id]
+  );
+
+  const [[justModifiedProverbsRow]] = await pool.query(
+    `
+    SELECT *
+    FROM proverbs
+    WHERE id = ?
+    `,
+    [id]
+  );
+
+  res.json({
+    resultCode: "S-1",
+    msg: "성공",
+    data: justModifiedProverbsRow,
+  });
 });
 
-app.listen(port);
+app.listen(port, () => {
+  console.log(`proverbs app listening on port ${port}`);
+});
